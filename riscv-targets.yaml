@@ -1,0 +1,30 @@
+- board: qemu-virt
+  tree: git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+  branch: master
+  arch: riscv
+  defconfig: 
+    - defconfig
+    - allnoconfig
+    - allyesconfig
+  toolchain:
+    - gcc-12
+    - gcc-11
+    - gcc-10
+  tests: 
+    - kselftest-cpufreq
+    - kselftest-memfd
+
+- board: starfive-visionfive2
+  tree: git://github.com/starfive-tech/linux.git
+  branch: visionfive
+  arch: riscv
+  defconfig: 
+    - visionfive_defconfig
+  toolchain: 
+    - gcc-12
+    - gcc-11
+    - gcc-10
+  tests: 
+    - kselftest
+    - kselftest-memfd
+  

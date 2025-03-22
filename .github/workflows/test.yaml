@@ -1,0 +1,91 @@
+name: RISC-V Kernel Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: generate matrix
+        id: set-matrix
+        run: |
+          matrix_json=$(./gen-matrix.py)
+          echo "matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$matrix_json" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  riscv-build:
+    needs: generate-matrix
+    name: Build & Test ${{ matrix.board }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Checkout Linux kernel
+        uses: actions/checkout@v4
+
+      - name: Install TuxMake and TuxRun
+        run: |
+          pip3 install tuxmake
+          pip3 install tuxrun
+
+      - name: clone linux kernel
+        run: |
+          git clone \
+          --depth 1 \
+          --branch ${{ matrix.branch }} \
+          --single-branch \
+          ${{ matrix.tree }} linux
+
+      - name: Build kernel with TuxMake
+        run: |
+          cd linux
+          tuxmake \
+            --target-arch ${{ matrix.arch }} \
+            --toolchain ${{ matrix.toolchain }} \
+            --kconfig ${{ matrix.defconfig }} \
+            --runtime docker \
+            --output-dir build/
+
+      - name: Package modules
+        run: |
+          cd build
+          tar -cJf modules.tar.xz lib/modules || true
+
+      - name: Run in QEMU with TuxRun
+        run: |
+          tuxrun \
+            --arch ${{ matrix.arch }} \
+            --kernel build/Image \
+            --runtime docker \
+            --modules build/modules.tar.xz \
+            --tests ${{ matrix.tests }} \
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.board }}-artifacts
+          path: build/
