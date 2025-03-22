@@ -35,7 +35,7 @@ jobs:
 
   riscv-build:
     needs: generate-matrix
-    name: Build & Test ${{ matrix.board }}
+    name: Build & Test ${{ matrix.device }}-${{ matrix.arch }}-${{ matrix.toolchain }}-${{ matrix.defconfig }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -47,12 +47,12 @@ jobs:
       - name: Checkout Linux kernel
         uses: actions/checkout@v4
 
-      - name: Install TuxMake and TuxRun
+      - name: Install Prerequisites
         run: |
           pip3 install tuxmake
           pip3 install tuxrun
 
-      - name: clone linux kernel
+      - name: Clone Linux kernel
         run: |
           git clone \
           --depth 1 \
@@ -60,32 +60,33 @@ jobs:
           --single-branch \
           ${{ matrix.tree }} linux
 
-      - name: Build kernel with TuxMake
+      - name: TuxMake
         run: |
-          cd linux
           tuxmake \
+            -C linux \
             --target-arch ${{ matrix.arch }} \
             --toolchain ${{ matrix.toolchain }} \
             --kconfig ${{ matrix.defconfig }} \
             --runtime docker \
             --output-dir build/
 
-      - name: Package modules
+      - name: TuxRun
         run: |
-          cd build
-          tar -cJf modules.tar.xz lib/modules || true
-
-      - name: Run in QEMU with TuxRun
-        run: |
-          tuxrun \
-            --arch ${{ matrix.arch }} \
-            --kernel build/Image \
-            --runtime docker \
-            --modules build/modules.tar.xz \
+          TUXRUN_CMD="tuxrun \
+            --kernel build/Image.gz \
             --tests ${{ matrix.tests }} \
+            --runtime docker \
+            --device ${{ matrix.device }}"
+          
+          if [ -f "build/modules.tar.xz" ]; then
+            TUXRUN_CMD="$TUXRUN_CMD \
+            --modules build/modules.tar.xz"
+          fi
 
-      - name: Upload build artifacts
+          eval "$TUXRUN_CMD"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.board }}-artifacts
+          name: ${{ matrix.device }}-artifacts
           path: build/
